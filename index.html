@@ -1,0 +1,873 @@
+<div class="snake-game-container">
+    <div class="game-header">
+      <h1>🐍 Ultimate Snake Game</h1>
+      <button id="menu-toggle">☰ Menu</button>
+    </div>
+    <head><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    </head>
+    
+    <div class="game-wrapper">
+      <div class="game-display">
+        <div class="game-info">
+          <div class="score-display">
+            <span>Score: <span id="score">0</span></span>
+            <span>High Score: <span id="high-score">0</span></span>
+            <span>Level: <span id="level">1</span></span>
+          </div>
+          <div class="powerup-indicator">
+            <span id="active-powerup">None</span>
+          </div>
+        </div>
+        <canvas id="game-canvas" width="400" height="400"></canvas>
+        <div class="controls">
+          <button id="start-btn">▶ Start Game</button>
+          <button id="reset-btn">🔄 Reset</button>
+        </div>
+      </div>
+      
+      <div class="menu-panel" id="menu-panel">
+        <div class="menu-section">
+          <h3>⚙️ Game Settings</h3>
+          <div class="setting">
+            <label>Difficulty:</label>
+            <select id="difficulty">
+              <option value="easy">Easy</option>
+              <option value="medium" selected>Medium</option>
+              <option value="hard">Hard</option>
+              <option value="expert">Expert</option>
+            </select>
+          </div>
+          <div class="setting">
+            <label>Speed:</label>
+            <input type="range" id="speed" min="5" max="20" value="7">
+            <span id="speed-value">7</span>
+          </div>
+          <div class="setting">
+            <label>Theme:</label>
+            <select id="theme">
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+              <option value="retro">Retro</option>
+              <option value="nature">Nature</option>
+            </select>
+          </div>
+          <div class="setting">
+            <label>Snake Color:</label>
+            <input type="color" id="snake-color" value="#4CAF50">
+          </div>
+          <div class="setting">
+            <label>Grid Size:</label>
+            <select id="grid-size">
+              <option value="small">Small (20x20)</option>
+              <option value="medium" selected>Medium (25x25)</option>
+              <option value="large">Large (30x30)</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="menu-section">
+          <h3>🍎 Powerups</h3>
+          <div class="setting">
+            <label><input type="checkbox" id="golden-apple" checked> Golden Apple (2x points)</label>
+          </div>
+          <div class="setting">
+            <label><input type="checkbox" id="speed-fruit" checked> Speed Fruit (+speed)</label>
+          </div>
+          <div class="setting">
+            <label><input type="checkbox" id="slow-fruit" checked> Slow Fruit (-speed)</label>
+          </div>
+          <div class="setting">
+            <label><input type="checkbox" id="bonus-fruit" checked> Bonus Fruit (+5 pts)</label>
+          </div>
+        </div>
+        
+        <div class="menu-section">
+          <h3>🎮 Controls</h3>
+          <p>Arrow Keys or WASD to move</p>
+          <p>Space to pause</p>
+          <p>P to open menu</p>
+        </div>
+      </div>
+    </div>
+    
+    <div class="instructions">
+      <p>Collect fruit to grow. Avoid walls and yourself! Special fruits give bonuses.</p>
+    </div>
+  </div>
+  
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // Game elements
+    const canvas = document.getElementById('game-canvas');
+    const ctx = canvas.getContext('2d');
+    const scoreElement = document.getElementById('score');
+    const highScoreElement = document.getElementById('high-score');
+    const levelElement = document.getElementById('level');
+    const activePowerupElement = document.getElementById('active-powerup');
+    const startBtn = document.getElementById('start-btn');
+    const resetBtn = document.getElementById('reset-btn');
+    const menuToggle = document.getElementById('menu-toggle');
+    const menuPanel = document.getElementById('menu-panel');
+  
+    // Settings elements
+    const difficultySelect = document.getElementById('difficulty');
+    const speedSlider = document.getElementById('speed');
+    const speedValue = document.getElementById('speed-value');
+    const themeSelect = document.getElementById('theme');
+    const snakeColorPicker = document.getElementById('snake-color');
+    const gridSizeSelect = document.getElementById('grid-size');
+    const goldenAppleCheck = document.getElementById('golden-apple');
+    const speedFruitCheck = document.getElementById('speed-fruit');
+    const slowFruitCheck = document.getElementById('slow-fruit');
+    const bonusFruitCheck = document.getElementById('bonus-fruit');
+  
+    // Game settings
+    let gridSize = 16;
+    let tileCount = canvas.width / gridSize;
+    let speed = parseInt(speedSlider.value);
+    let invincibleTimer = 0;
+    let powerupActive = false;
+    let powerupType = '';
+    let powerupEndTime = 0;
+    
+    // Game variables
+    let snake = [{x: 10, y: 10}];
+    let food = {x: 5, y: 5, type: 'normal'};
+    let xVelocity = 0;
+    let yVelocity = 0;
+    let score = 0;
+    let highScore = localStorage.getItem('snakeHighScore') || 0;
+    let level = 1;
+    let gameRunning = false;
+    let gamePaused = false;
+    let gameLoop;
+    let specialFoodTimer = 0;
+    let currentTheme = 'light';
+    
+    // Initialize display
+    highScoreElement.textContent = highScore;
+    speedValue.textContent = speed;
+    
+    // Apply theme
+    function applyTheme(theme) {
+      currentTheme = theme;
+      document.querySelector('.snake-game-container').className = `snake-game-container ${theme}-theme`;
+      
+      switch(theme) {
+        case 'dark':
+          canvas.style.backgroundColor = '#222';
+          break;
+        case 'retro':
+          canvas.style.backgroundColor = '#0f0f23';
+          break;
+        case 'nature':
+          canvas.style.backgroundColor = '#e8f5e9';
+          break;
+        default: // light
+          canvas.style.backgroundColor = '#f0f0f0';
+      }
+    }
+    
+    // Set grid size
+    function setGridSize(size) {
+      switch(size) {
+        case 'small':
+          gridSize = 20;
+          break;
+        case 'large':
+          gridSize = 13.33;
+          break;
+        default: // medium
+          gridSize = 16;
+      }
+      tileCount = canvas.width / gridSize;
+    }
+    
+    // Draw functions
+    function drawSnake() {
+      const snakeColor = snakeColorPicker.value;
+      
+      // Draw body
+      for (let i = 0; i < snake.length; i++) {
+        const segment = snake[i];
+        ctx.fillStyle = i === 0 ? `${snakeColor}cc` : snakeColor; // Head is slightly transparent
+        ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize - 1, gridSize - 1);
+        
+        // Add details to head
+        if (i === 0) {
+          ctx.fillStyle = '#000';
+          // Eyes
+          if (xVelocity === 1) { // Right
+            ctx.fillRect((segment.x * gridSize) + gridSize - 4, (segment.y * gridSize) + 3, 2, 2);
+            ctx.fillRect((segment.x * gridSize) + gridSize - 4, (segment.y * gridSize) + gridSize - 5, 2, 2);
+          } else if (xVelocity === -1) { // Left
+            ctx.fillRect((segment.x * gridSize) + 2, (segment.y * gridSize) + 3, 2, 2);
+            ctx.fillRect((segment.x * gridSize) + 2, (segment.y * gridSize) + gridSize - 5, 2, 2);
+          } else if (yVelocity === -1) { // Up
+            ctx.fillRect((segment.x * gridSize) + 3, (segment.y * gridSize) + 2, 2, 2);
+            ctx.fillRect((segment.x * gridSize) + gridSize - 5, (segment.y * gridSize) + 2, 2, 2);
+          } else if (yVelocity === 1) { // Down
+            ctx.fillRect((segment.x * gridSize) + 3, (segment.y * gridSize) + gridSize - 4, 2, 2);
+            ctx.fillRect((segment.x * gridSize) + gridSize - 5, (segment.y * gridSize) + gridSize - 4, 2, 2);
+          }
+        }
+      }
+    }
+  
+    function drawFood() {
+      switch(food.type) {
+        case 'golden':
+          ctx.fillStyle = '#FFD700';
+          break;
+        case 'speed':
+          ctx.fillStyle = '#2196F3';
+          break;
+        case 'slow':
+          ctx.fillStyle = '#9C27B0';
+          break;
+        case 'bonus':
+          ctx.fillStyle = '#FF9800';
+          break;
+        default:
+          ctx.fillStyle = '#f44336';
+      }
+      
+      ctx.beginPath();
+      ctx.arc(
+        (food.x * gridSize) + (gridSize / 2),
+        (food.y * gridSize) + (gridSize / 2),
+        (gridSize / 2) - 1,
+        0,
+        Math.PI * 2
+      );
+      ctx.fill();
+      
+      // Add details for special fruits
+      if (food.type !== 'normal') {
+        ctx.fillStyle = '#fff';
+        ctx.font = `${Math.floor(gridSize/2)}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        
+        if (food.type === 'golden') {
+          ctx.fillText('★', (food.x * gridSize) + (gridSize / 2), (food.y * gridSize) + (gridSize / 2));
+        } else if (food.type === 'speed') {
+          ctx.fillText('⚡', (food.x * gridSize) + (gridSize / 2), (food.y * gridSize) + (gridSize / 2));
+        } else if (food.type === 'slow') {
+          ctx.fillText('🐢', (food.x * gridSize) + (gridSize / 2), (food.y * gridSize) + (gridSize / 2));
+        } else if (food.type === 'bonus') {
+          ctx.fillText('+5', (food.x * gridSize) + (gridSize / 2), (food.y * gridSize) + (gridSize / 2));
+        }
+      }
+    }
+  
+    function clearCanvas() {
+      ctx.fillStyle = currentTheme === 'dark' ? '#222' : 
+                     currentTheme === 'retro' ? '#0f0f23' :
+                     currentTheme === 'nature' ? '#e8f5e9' : '#f0f0f0';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Draw grid lines
+      if (currentTheme !== 'retro') {
+        ctx.strokeStyle = currentTheme === 'dark' ? '#444' : '#ddd';
+        ctx.lineWidth = 0.5;
+        
+        for (let i = 0; i < tileCount; i++) {
+          // Vertical lines
+          ctx.beginPath();
+          ctx.moveTo(i * gridSize, 0);
+          ctx.lineTo(i * gridSize, canvas.height);
+          ctx.stroke();
+          
+          // Horizontal lines
+          ctx.beginPath();
+          ctx.moveTo(0, i * gridSize);
+          ctx.lineTo(canvas.width, i * gridSize);
+          ctx.stroke();
+        }
+      }
+    }
+    
+    // Game logic
+    function moveSnake() {
+      // Decrease invincibility timer if active
+      if (invincibleTimer > 0) {
+        invincibleTimer--;
+      }
+      
+      // Check if powerup expired
+      if (powerupActive && Date.now() > powerupEndTime) {
+        powerupActive = false;
+        activePowerupElement.textContent = 'None';
+        
+        // Reset speed if it was a speed powerup
+        speed = parseInt(speedSlider.value);
+      }
+      
+      const head = {x: snake[0].x + xVelocity, y: snake[0].y + yVelocity};
+  
+      // Check wall collision (unless invincible)
+      if (invincibleTimer <= 0 && (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount)) {
+        gameOver();
+        return;
+      }
+  
+      // Check self collision (unless invincible)
+      if (invincibleTimer <= 0) {
+        for (let i = 0; i < snake.length; i++) {
+          if (head.x === snake[i].x && head.y === snake[i].y) {
+            gameOver();
+            return;
+          }
+        }
+      }
+      
+      // Wrap around if invincible
+      if (invincibleTimer > 0) {
+        if (head.x < 0) head.x = tileCount - 1;
+        if (head.x >= tileCount) head.x = 0;
+        if (head.y < 0) head.y = tileCount - 1;
+        if (head.y >= tileCount) head.y = 0;
+      }
+  
+      snake.unshift(head);
+  
+      // Check food collision
+      if (head.x === food.x && head.y === food.y) {
+        let points = 1;
+        
+        // Handle different food types
+        switch(food.type) {
+          case 'golden':
+            points = 2;
+            break;
+          case 'bonus':
+            points = 5;
+            break;
+          case 'speed':
+            activatePowerup('speed', 10000); // 10 seconds
+            break;
+          case 'slow':
+            activatePowerup('slow', 10000); // 10 seconds
+            break;
+        }
+        
+        score += points;
+        scoreElement.textContent = score;
+        
+        // Level up every 10 points
+        const newLevel = Math.floor(score / 10) + 1;
+        if (newLevel > level) {
+          level = newLevel;
+          levelElement.textContent = level;
+          
+          // Increase speed slightly with level (capped at 20)
+          if (speed < 20) {
+            speed = Math.min(7 + level, 20);
+            speedSlider.value = speed;
+            speedValue.textContent = speed;
+          }
+        }
+        
+        if (score > highScore) {
+          highScore = score;
+          highScoreElement.textContent = highScore;
+          localStorage.setItem('snakeHighScore', highScore);
+        }
+        
+        generateFood();
+      } else {
+        snake.pop();
+      }
+    }
+    
+    function activatePowerup(type, duration) {
+      powerupActive = true;
+      powerupType = type;
+      powerupEndTime = Date.now() + duration;
+      
+      switch(type) {
+        case 'speed':
+          speed = Math.min(speed + 3, 25);
+          activePowerupElement.textContent = 'Speed Boost!';
+          break;
+        case 'slow':
+          speed = Math.max(speed - 3, 3);
+          activePowerupElement.textContent = 'Slow Down!';
+          break;
+      }
+    }
+  
+    function generateFood() {
+      let validPosition = false;
+      while (!validPosition) {
+        food = {
+          x: Math.floor(Math.random() * tileCount),
+          y: Math.floor(Math.random() * tileCount),
+          type: 'normal'
+        };
+  
+        // 20% chance for special fruit (if enabled)
+        if (Math.random() < 0.2) {
+          const availableTypes = [];
+          if (goldenAppleCheck.checked) availableTypes.push('golden');
+          if (speedFruitCheck.checked) availableTypes.push('speed');
+          if (slowFruitCheck.checked) availableTypes.push('slow');
+          if (bonusFruitCheck.checked) availableTypes.push('bonus');
+          
+          if (availableTypes.length > 0) {
+            food.type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+          }
+        }
+  
+        validPosition = true;
+        for (let i = 0; i < snake.length; i++) {
+          if (food.x === snake[i].x && food.y === snake[i].y) {
+            validPosition = false;
+            break;
+          }
+        }
+      }
+    }
+  
+    function gameOver() {
+      clearInterval(gameLoop);
+      gameRunning = false;
+      startBtn.textContent = '▶ Start Game';
+      ctx.fillStyle = '#fff';
+      ctx.font = '30px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 2 - 20);
+      ctx.font = '16px Arial';
+      ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
+    }
+  
+    function gameUpdate() {
+      if (gamePaused) return;
+      
+      clearCanvas();
+      drawFood();
+      moveSnake();
+      drawSnake();
+      
+      // Draw invincibility indicator
+      if (invincibleTimer > 0) {
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'right';
+        ctx.fillText(`Invincible: ${(invincibleTimer/60).toFixed(1)}s`, canvas.width - 10, 15);
+      }
+    }
+  
+    function startGame() {
+      if (gameRunning) {
+        if (gamePaused) {
+          gamePaused = false;
+          startBtn.textContent = '⏸ Pause';
+          gameLoop = setInterval(gameUpdate, 1000 / speed);
+        } else {
+          gamePaused = true;
+          startBtn.textContent = '▶ Resume';
+          clearInterval(gameLoop);
+          
+          // Draw pause message
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.fillRect(canvas.width/2 - 100, canvas.height/2 - 30, 200, 60);
+          ctx.fillStyle = '#fff';
+          ctx.font = '24px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2);
+        }
+      } else {
+        // Reset game state if needed
+        if (xVelocity === 0 && yVelocity === 0 && snake.length > 1) {
+          resetGame();
+        }
+        
+        gameRunning = true;
+        gamePaused = false;
+        startBtn.textContent = '⏸ Pause';
+        
+        // Apply settings
+        speed = parseInt(speedSlider.value);
+        setGridSize(gridSizeSelect.value);
+        applyTheme(themeSelect.value);
+        
+        // Start with 2 seconds of invincibility
+        invincibleTimer = 120; // 2 seconds at 60fps
+        
+        gameLoop = setInterval(gameUpdate, 1000 / speed);
+      }
+    }
+  
+    function resetGame() {
+      clearInterval(gameLoop);
+      snake = [{x: 10, y: 10}];
+      xVelocity = 0;
+      yVelocity = 0;
+      score = 0;
+      level = 1;
+      scoreElement.textContent = score;
+      levelElement.textContent = level;
+      activePowerupElement.textContent = 'None';
+      powerupActive = false;
+      generateFood();
+      gameRunning = false;
+      gamePaused = false;
+      startBtn.textContent = '▶ Start Game';
+      clearCanvas();
+      drawFood();
+      drawSnake();
+      
+      // Reset speed to selected value
+      speed = parseInt(speedSlider.value);
+    }
+  
+    // Event listeners
+    startBtn.addEventListener('click', startGame);
+    resetBtn.addEventListener('click', resetGame);
+    menuToggle.addEventListener('click', () => {
+      menuPanel.style.display = menuPanel.style.display === 'block' ? 'none' : 'block';
+    });
+  
+    // Settings listeners
+    speedSlider.addEventListener('input', () => {
+      speed = parseInt(speedSlider.value);
+      speedValue.textContent = speed;
+      
+      if (gameRunning && !gamePaused) {
+        clearInterval(gameLoop);
+        gameLoop = setInterval(gameUpdate, 1000 / speed);
+      }
+    });
+    
+    themeSelect.addEventListener('change', () => {
+      applyTheme(themeSelect.value);
+      if (gameRunning) gameUpdate();
+    });
+    
+    snakeColorPicker.addEventListener('input', () => {
+      if (gameRunning) gameUpdate();
+    });
+    
+    gridSizeSelect.addEventListener('change', () => {
+      setGridSize(gridSizeSelect.value);
+      if (gameRunning) gameUpdate();
+    });
+  
+    document.addEventListener('keydown', (e) => {
+      // Pause with space
+      if (e.key === ' ' && gameRunning) {
+        startGame();
+        return;
+      }
+      
+      // Open menu with P
+      if (e.key === 'p' || e.key === 'P') {
+        menuPanel.style.display = menuPanel.style.display === 'block' ? 'none' : 'block';
+        return;
+      }
+      
+      // Prevent reversing direction
+      switch(e.key) {
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          if (yVelocity !== 1) {
+            xVelocity = 0;
+            yVelocity = -1;
+          }
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          if (yVelocity !== -1) {
+            xVelocity = 0;
+            yVelocity = 1;
+          }
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          if (xVelocity !== 1) {
+            xVelocity = -1;
+            yVelocity = 0;
+          }
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          if (xVelocity !== -1) {
+            xVelocity = 1;
+            yVelocity = 0;
+          }
+          break;
+      }
+    });
+  
+    // Initial draw
+    applyTheme('light');
+    clearCanvas();
+    drawFood();
+    drawSnake();
+  });
+  
+  </script>
+  
+  <style>
+  .snake-game-container {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    text-align: center;
+    transition: all 0.3s ease;
+  }
+  
+  /* Theme styles */
+  .light-theme {
+    background-color: #ffffff;
+    color: #333;
+  }
+  
+  .dark-theme {
+    background-color: #2d2d2d;
+    color: #f0f0f0;
+  }
+  
+  .retro-theme {
+    background-color: #0f0f23;
+    color: #00ff00;
+    text-shadow: 0 0 5px #00ff00;
+  }
+  
+  .nature-theme {
+    background-color: #e8f5e9;
+    color: #2e7d32;
+  }
+  
+  .game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+  }
+  
+  .game-header h1 {
+    margin: 0;
+    font-size: 24px;
+  }
+  
+  #menu-toggle {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+  }
+  
+  .game-wrapper {
+    display: flex;
+    gap: 20px;
+  }
+  
+  .game-display {
+    flex: 1;
+  }
+  
+  .menu-panel {
+    width: 250px;
+    background: rgba(255, 255, 255, 0.9);
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    display: none;
+  }
+  
+  .dark-theme .menu-panel {
+    background: rgba(45, 45, 45, 0.9);
+    color: #f0f0f0;
+  }
+  
+  .retro-theme .menu-panel {
+    background: rgba(15, 15, 35, 0.9);
+    color: #00ff00;
+  }
+  
+  .nature-theme .menu-panel {
+    background: rgba(232, 245, 233, 0.9);
+    color: #2e7d32;
+  }
+  
+  .menu-section {
+    margin-bottom: 20px;
+  }
+  
+  .menu-section h3 {
+    margin-top: 0;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+  }
+  
+  .setting {
+    margin: 10px 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .setting label {
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+  }
+  
+  .setting input[type="range"] {
+    width: 100%;
+  }
+  
+  .setting select, .setting input[type="color"] {
+    width: 100%;
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #ddd;
+  }
+  
+  .game-info {
+    margin-bottom: 10px;
+  }
+  
+  .score-display {
+    display: flex;
+    justify-content: space-between;
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+  
+  .powerup-indicator {
+    font-style: italic;
+    color: #ff9800;
+  }
+  
+  .dark-theme .powerup-indicator {
+    color: #ffb74d;
+  }
+  
+  .retro-theme .powerup-indicator {
+    color: #00ff00;
+  }
+  
+  #game-canvas {
+    border: 3px solid #4CAF50;
+    border-radius: 8px;
+    display: block;
+    margin: 0 auto 15px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  }
+  
+  .dark-theme #game-canvas {
+    border-color: #666;
+  }
+  
+  .retro-theme #game-canvas {
+    border-color: #00ff00;
+  }
+  
+  .nature-theme #game-canvas {
+    border-color: #81c784;
+  }
+  
+  .controls {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 15px;
+  }
+  
+  .controls button {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  
+  .controls button:hover {
+    background-color: #45a049;
+    transform: translateY(-2px);
+  }
+  
+  .controls button:active {
+    transform: translateY(0);
+  }
+  
+  .dark-theme .controls button {
+    background-color: #666;
+  }
+  
+  .retro-theme .controls button {
+    background-color: #00aa00;
+  }
+  
+  .nature-theme .controls button {
+    background-color: #81c784;
+  }
+  
+  #reset-btn {
+    background-color: #f44336;
+  }
+  
+  #reset-btn:hover {
+    background-color: #d32f2f;
+  }
+  
+  .dark-theme #reset-btn {
+    background-color: #d32f2f;
+  }
+  
+  .retro-theme #reset-btn {
+    background-color: #aa0000;
+  }
+  
+  .nature-theme #reset-btn {
+    background-color: #e57373;
+  }
+  
+  .instructions {
+    font-size: 14px;
+    color: #666;
+    margin-top: 10px;
+    font-style: italic;
+  }
+  
+  .dark-theme .instructions {
+    color: #aaa;
+  }
+  
+  .retro-theme .instructions {
+    color: #00aa00;
+  }
+  
+  @media (max-width: 768px) {
+    .game-wrapper {
+      flex-direction: column;
+    }
+    
+    .menu-panel {
+      width: auto;
+    }
+  }
+  </style>
